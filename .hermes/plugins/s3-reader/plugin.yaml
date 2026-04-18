@@ -1,0 +1,13 @@
+name: s3-reader
+version: 0.1.0
+description: "Read-only AWS S3 inspector — list buckets/objects, read object content, generate presigned GET URLs."
+author: Chefbook
+pip_dependencies:
+  - boto3
+requires_env: []
+provides_tools:
+  - s3_list_buckets
+  - s3_list_objects
+  - s3_head_object
+  - s3_get_object
+  - s3_presign_get
