@@ -1,0 +1,14 @@
+name: postgres-reader
+version: 0.1.0
+description: "Read-only Postgres inspector for the Chefbook RDS (chefbook + hermes schemas)."
+author: Chefbook
+pip_dependencies:
+  - psycopg[binary]
+  - boto3
+requires_env: []
+provides_tools:
+  - pg_schemas
+  - pg_tables
+  - pg_describe
+  - pg_sample
+  - pg_query
