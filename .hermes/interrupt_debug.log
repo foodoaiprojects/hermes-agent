@@ -1,0 +1,6 @@
+13:07:19 interrupt fired: msg="I don't think you have the db creds aviablable to read the d", children=0, parent._interrupt=True
+13:07:19 ENTER: queued interrupt msg="I don't think you have the db creds aviablable to read the d", agent_running=True
+13:14:07 interrupt fired: msg='I have given you postgrea db creds in the .env file also you', children=0, parent._interrupt=True
+13:14:07 ENTER: queued interrupt msg='I have given you postgrea db creds in the .env file also you', agent_running=True
+13:23:29 interrupt fired: msg='this is an postgres DB table not sqlite', children=0, parent._interrupt=True
+13:23:29 ENTER: queued interrupt msg='this is an postgres DB table not sqlite', agent_running=True

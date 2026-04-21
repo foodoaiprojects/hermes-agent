@@ -117,6 +117,42 @@ def _conninfo_from_secrets_manager() -> str:
     )
 
 
+def _libpq_quote(v: str) -> str:
+    """Escape a libpq conninfo value: backslash-escape ' and \\, then single-quote."""
+    escaped = v.replace("\\", "\\\\").replace("'", "\\'")
+    return f"'{escaped}'"
+
+
+def _conninfo_from_db_env_vars() -> str | None:
+    """Compose a libpq conninfo string from discrete DB_* env vars.
+
+    Returns None when DB_HOST isn't set (signal that discrete vars aren't in use).
+    Uses libpq key='value' format so passwords with special characters like
+    ``) ( # { * $`` don't need URL-encoding.
+    """
+    host = os.environ.get("DB_HOST")
+    if not host:
+        return None
+    port = os.environ.get("DB_PORT", "5432")
+    dbname = os.environ.get("DB_DATABASE") or os.environ.get("DB_NAME") or "postgres"
+    user = os.environ.get("DB_USERNAME") or os.environ.get("DB_USER") or ""
+    password = os.environ.get("DB_PASSWORD", "")
+    sslmode = os.environ.get("DB_SSLMODE", "require")
+
+    parts = [
+        f"host={_libpq_quote(host)}",
+        f"port={port}",
+        f"dbname={_libpq_quote(dbname)}",
+    ]
+    if user:
+        parts.append(f"user={_libpq_quote(user)}")
+    if password:
+        parts.append(f"password={_libpq_quote(password)}")
+    parts.append(f"sslmode={sslmode}")
+    parts.append("connect_timeout=10")
+    return " ".join(parts)
+
+
 def _get_conninfo() -> str:
     global _conninfo_cache
     if _conninfo_cache is not None:
@@ -124,8 +160,13 @@ def _get_conninfo() -> str:
     with _conninfo_lock:
         if _conninfo_cache is not None:
             return _conninfo_cache
+        # Resolution order: DATABASE_URL → discrete DB_* vars → AWS Secrets Manager.
         url = os.environ.get("DATABASE_URL")
-        _conninfo_cache = url if url else _conninfo_from_secrets_manager()
+        if url:
+            _conninfo_cache = url
+        else:
+            from_env = _conninfo_from_db_env_vars()
+            _conninfo_cache = from_env if from_env else _conninfo_from_secrets_manager()
         return _conninfo_cache
 
 
@@ -163,6 +204,8 @@ def _is_available() -> bool:
     except Exception:
         return False
     if os.environ.get("DATABASE_URL"):
+        return True
+    if os.environ.get("DB_HOST"):
         return True
     try:
         import boto3  # noqa: F401
