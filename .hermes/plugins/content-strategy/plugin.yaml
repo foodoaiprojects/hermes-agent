@@ -1,0 +1,8 @@
+name: content-strategy
+version: 0.1.0
+description: "submit_strategy tool — structured output contract for the FastAPI /v1/content-strategy endpoint."
+author: Chefbook
+pip_dependencies: []
+requires_env: []
+provides_tools:
+  - submit_strategy
