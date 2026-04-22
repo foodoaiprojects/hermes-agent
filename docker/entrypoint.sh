@@ -68,4 +68,11 @@ if [ -d "$INSTALL_DIR/skills" ]; then
     python3 "$INSTALL_DIR/tools/skills_sync.py"
 fi
 
-exec hermes "$@"
+# Execute the container CMD verbatim.  Default from the Dockerfile is
+# ``hermes`` (interactive TUI); ECS task definitions for the FastAPI
+# wrapper override with ["uvicorn", "api_server.main:app", ...].
+if [ "$#" -eq 0 ]; then
+    exec hermes
+else
+    exec "$@"
+fi

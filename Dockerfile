@@ -44,3 +44,7 @@ RUN chmod +x /opt/hermes/docker/entrypoint.sh
 ENV HERMES_HOME=/opt/data
 VOLUME [ "/opt/data" ]
 ENTRYPOINT [ "/opt/hermes/docker/entrypoint.sh" ]
+# Default CMD is the interactive hermes CLI. ECS task definitions for the
+# FastAPI wrapper override this with:
+#   ["uvicorn", "api_server.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD [ "hermes" ]

@@ -1,0 +1,144 @@
+name: deploy-dev
+
+# Build the hermes-agent container, push to ECR, and deploy the hermes-api
+# ECS service. Triggers on every push to main + manual dispatch.
+#
+# Required repo secrets:
+#   AWS_ACCESS_KEY_ID      — from the github-actions-ecr IAM user
+#   AWS_SECRET_ACCESS_KEY
+#
+# Required repo variables (Settings → Secrets and variables → Actions → Variables):
+#   AWS_ACCOUNT_ID         — e.g. 123456789012
+#   AWS_REGION             — eu-north-1
+#   ECR_REPOSITORY         — hermes-dev
+#   ECS_CLUSTER            — chefbook-dev-cluster
+#   ECS_SERVICE            — chefbook-dev-hermes-service
+#   ECS_TASK_FAMILY        — chefbook-dev-hermes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api_server/**'
+      - '.hermes/plugins/**'
+      - 'skills/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'Dockerfile'
+      - 'docker/**'
+      - 'run_agent.py'
+      - 'hermes_cli/**'
+      - 'agent/**'
+      - 'tools/**'
+      - '.github/workflows/deploy-dev.yml'
+      - 'deploy/**'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why are you deploying manually?'
+        required: false
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      AWS_REGION:     ${{ vars.AWS_REGION }}
+      ECR_REGISTRY:   ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      ECS_CLUSTER:    ${{ vars.ECS_CLUSTER }}
+      ECS_SERVICE:    ${{ vars.ECS_SERVICE }}
+      ECS_TASK_FAMILY: ${{ vars.ECS_TASK_FAMILY }}
+      IMAGE_TAG:      ${{ github.sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region:            ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Cache layers across runs. Much faster rebuilds when only the app
+      # layer changes (typical case — the 1.5 GB base layer is stable).
+      - name: Build + push image (linux/amd64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
+            ${{ env.ECR_REGISTRY }}/${{ env.ECR_REPOSITORY }}:latest
+          cache-from: type=gha
+          cache-to:   type=gha,mode=max
+
+      # Render the task-definition template with the new image tag. The
+      # template lives in this repo at deploy/task-definition.json.tmpl so
+      # deploys never need to touch terraform for code changes.
+      - name: Render task definition
+        id: render
+        run: |
+          TASK_DEF=$(mktemp)
+          IMAGE_URI="${ECR_REGISTRY}/${ECR_REPOSITORY}:${IMAGE_TAG}"
+
+          # Pull the current live task def to reuse role ARNs, log groups,
+          # secret references etc. that Terraform owns. We only override
+          # the image field.
+          aws ecs describe-task-definition \
+            --task-definition "$ECS_TASK_FAMILY" \
+            --region "$AWS_REGION" \
+            --query 'taskDefinition' > "$TASK_DEF.raw"
+
+          # Strip fields register-task-definition doesn't accept on re-register.
+          jq '
+            del(
+              .taskDefinitionArn,
+              .revision,
+              .status,
+              .requiresAttributes,
+              .compatibilities,
+              .registeredAt,
+              .registeredBy
+            )
+            | (.containerDefinitions[] | select(.name == "hermes-api") | .image) |= "'"$IMAGE_URI"'"
+          ' "$TASK_DEF.raw" > "$TASK_DEF"
+
+          echo "task_def_file=$TASK_DEF" >> "$GITHUB_OUTPUT"
+          echo "image_uri=$IMAGE_URI"     >> "$GITHUB_OUTPUT"
+
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.render.outputs.task_def_file }}
+          service:         ${{ env.ECS_SERVICE }}
+          cluster:         ${{ env.ECS_CLUSTER }}
+          wait-for-service-stability: true
+          wait-for-minutes: 15
+
+      - name: Report
+        run: |
+          echo "✅ Deployed image ${{ steps.render.outputs.image_uri }}"
+          echo "   Service:  ${{ env.ECS_SERVICE }}"
+          echo "   Cluster:  ${{ env.ECS_CLUSTER }}"
+          if [ -n "${{ github.event.inputs.reason }}" ]; then
+            echo "   Reason:   ${{ github.event.inputs.reason }}"
+          fi
