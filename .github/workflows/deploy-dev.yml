@@ -7,13 +7,7 @@ name: deploy-dev
 #   AWS_ACCESS_KEY_ID      — from the github-actions-ecr IAM user
 #   AWS_SECRET_ACCESS_KEY
 #
-# Required repo variables (Settings → Secrets and variables → Actions → Variables):
-#   AWS_ACCOUNT_ID         — e.g. 123456789012
-#   AWS_REGION             — eu-north-1
-#   ECR_REPOSITORY         — hermes-dev
-#   ECS_CLUSTER            — chefbook-dev-cluster
-#   ECS_SERVICE            — chefbook-dev-hermes-service
-#   ECS_TASK_FAMILY        — chefbook-dev-hermes
+# No repo variables required; deployment targets are hardcoded below.
 
 on:
   push:
@@ -51,12 +45,12 @@ jobs:
     timeout-minutes: 30
 
     env:
-      AWS_REGION:     ${{ vars.AWS_REGION }}
-      ECR_REGISTRY:   ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      ECS_CLUSTER:    ${{ vars.ECS_CLUSTER }}
-      ECS_SERVICE:    ${{ vars.ECS_SERVICE }}
-      ECS_TASK_FAMILY: ${{ vars.ECS_TASK_FAMILY }}
+      AWS_REGION:      eu-north-1
+      ECR_REGISTRY:    878070683567.dkr.ecr.eu-north-1.amazonaws.com
+      ECR_REPOSITORY:  chefbook-dev-hermes
+      ECS_CLUSTER:     chefbook-dev-cluster
+      ECS_SERVICE:     chefbook-dev-hermes-service
+      ECS_TASK_FAMILY: chefbook-dev-hermes
       IMAGE_TAG:      ${{ github.sha }}
 
     steps:
