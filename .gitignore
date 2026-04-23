@@ -4,6 +4,7 @@
 __pycache__/
 .venv/
 .vscode/
+.hermes/auth.json
 .env
 .env.local
 .env.development.local
