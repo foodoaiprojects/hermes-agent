@@ -4,7 +4,7 @@ Exposes two endpoints (see api_server.main):
   POST /v1/prompts/improve        — synchronous prompt rewriting
   POST /v1/content-strategy       — async content-strategy planning (returns job_id)
   GET  /v1/jobs/{job_id}          — poll a strategy job's status + result
-  GET  /healthz                   — liveness + DB connectivity
+  GET  /health                   — liveness + DB connectivity
 
 Reads env vars:
   OPENROUTER_API_KEY              — LLM provider key (required)

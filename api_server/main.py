@@ -93,8 +93,8 @@ class JobStatus(BaseModel):
 # ─── Routes ────────────────────────────────────────────────────────────────
 
 
-@app.get("/healthz")
-async def healthz():
+@app.get("/health")
+async def health():
     pool = await db.get_pool()
     async with pool.acquire() as conn:
         await conn.fetchval("SELECT 1")
