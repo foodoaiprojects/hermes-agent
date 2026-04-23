@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 def _default_model() -> str:
     return os.environ.get(
         "HERMES_MODEL_DEFAULT",
-        "google/gemini-2.5-flash",
+        "google/gemini-3.1-flash-lite-preview",
     )
 
 

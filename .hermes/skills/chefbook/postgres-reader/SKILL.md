@@ -65,15 +65,13 @@ then `pg_tables` on the candidate schema.
 **Always reference tables as `schema.table`** — e.g. `chefbook.users`,
 never bare `users`. The tools don't set a default `search_path`.
 
-## Pitfalls & Troubleshooting
+## Troubleshooting Tool Visibility
 
-1. **Permission Errors**: The current database user may have restricted access to certain schemas (e.g., `chefbook`). If queries return a "Permission denied" error, you will need to operate with different credentials or notify the user. Always verify permissions by attempting a sample query or describe call before querying large datasets.
-2. **Table Lookup**: Use `SELECT tablename, schemaname FROM pg_tables` to confirm the location of a table if standard lookups (`pg_tables()`, `pg_describe()`) return empty results without error, as they may be checking the wrong schema scope.
-3. **Read-only is enforced by Postgres**, not application code. The role has `default_transaction_read_only = on`. Any write attempt returns `ReadOnlySqlTransaction` — don't retry it; report the failure and pick a different approach.
-4. **Row cap: 200** per `pg_query` / `pg_sample` call. Tighten your WHERE clause rather than cranking `limit` — the cap is hard.
-5. **Statement timeout: 30s**. If a query is too slow, the server cancels it. Don't wrap heavy analytics in this tool; that's API-server / OLAP territory.
-6. **Don't leak PII into logs or final responses** unless the user
-   explicitly asked for specific rows. Summarize when possible.
+If the `pg_*` tools are listed as enabled in `hermes plugins` but are not appearing in your tool registry:
+
+1. **Verify Plugin Registration**: Ensure the plugin service is actively running and that the agent has reloaded its tool registry.
+2. **Configuration Check**: Confirm that `HERMES_ENABLE_PROJECT_PLUGINS=1` is set in your `.hermes/.env` (this is a prerequisite for these plugins to load).
+3. **Manual Discovery**: If direct tool calls are failing, do not attempt to invoke them as Python functions within `execute_code`. They must be surfaced through the agent's tool registry. If they remain elusive, run `hermes plugins list` to verify status and `hermes status` to check for service-level errors.
 
 ## Tool quick reference
 

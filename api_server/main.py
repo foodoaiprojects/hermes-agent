@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from . import db, jobs, prompts, strategy_buffer
 from .agent_runner import run_agent_turn
@@ -61,6 +61,17 @@ class ImproveRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=200)
     prompt: str = Field(..., min_length=1, max_length=4000)
     type: Literal["IMAGE", "VIDEO", "STORY"] = "IMAGE"
+    reference_images: list[str] = Field(default_factory=list, max_length=8)
+    mask_image: Optional[str] = Field(default=None, max_length=2000)
+
+    @field_validator("type", mode="before")
+    @classmethod
+    def normalize_type(cls, value: Any) -> str:
+        if value is None:
+            return "IMAGE"
+        if isinstance(value, str):
+            return value.strip().upper()
+        return value
 
 
 class ImproveResponse(BaseModel):
@@ -105,9 +116,23 @@ async def health():
 @app.post("/v1/prompts/improve", response_model=ImproveResponse)
 async def improve_prompt(body: ImproveRequest):
     session_id = f"api:improve:{body.user_id}"
+    skill_by_type = {
+        "IMAGE": "ai-image-generation",
+        "VIDEO": "ai-video-generation",
+        "STORY": "ai-image-generation",
+    }
+    reference_images_text = (
+        "\n".join(f"- {url}" for url in body.reference_images)
+        if body.reference_images
+        else "- none"
+    )
+    mask_image_text = body.mask_image or "none"
     system_prompt = prompts.IMPROVE_PROMPT_SYSTEM.format(
         user_id=body.user_id,
         content_type=body.type,
+        selected_skill=skill_by_type[body.type],
+        reference_images=reference_images_text,
+        mask_image=mask_image_text,
     )
     t0 = time.time()
     try:
@@ -117,6 +142,7 @@ async def improve_prompt(body: ImproveRequest):
             user_message=body.prompt,
             system_prompt=system_prompt,
             model=os.environ.get("HERMES_MODEL_IMPROVE"),
+            max_iterations=int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")),
         )
     except Exception as e:
         logger.exception("improve_prompt failed for user_id=%s", body.user_id)
