@@ -63,5 +63,6 @@ mini-swe-agent/
 .direnv/
 result
 website/static/api/skills-index.json
-.hermes/auth.json
+auth.json
 .hermes/sessions
+.hermes/auth.json
