@@ -12,7 +12,7 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
@@ -60,6 +60,7 @@ app = FastAPI(title="hermes-api", version="0.1.0", lifespan=lifespan)
 class ImproveRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=200)
     prompt: str = Field(..., min_length=1, max_length=4000)
+    type: Literal["IMAGE", "VIDEO", "STORY"] = "IMAGE"
 
 
 class ImproveResponse(BaseModel):
@@ -104,7 +105,10 @@ async def health():
 @app.post("/v1/prompts/improve", response_model=ImproveResponse)
 async def improve_prompt(body: ImproveRequest):
     session_id = f"api:improve:{body.user_id}"
-    system_prompt = prompts.IMPROVE_PROMPT_SYSTEM.format(user_id=body.user_id)
+    system_prompt = prompts.IMPROVE_PROMPT_SYSTEM.format(
+        user_id=body.user_id,
+        content_type=body.type,
+    )
     t0 = time.time()
     try:
         result = await run_agent_turn(
