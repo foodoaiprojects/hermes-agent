@@ -150,7 +150,11 @@ async def improve_prompt(body: ImproveRequest):
 
     final = (result.get("final_response") or "").strip()
     if not final:
-        raise HTTPException(status_code=502, detail="agent returned an empty response")
+        logger.warning(
+            "improve_prompt empty response for user_id=%s; returning raw prompt fallback",
+            body.user_id,
+        )
+        final = body.prompt.strip()
 
     return ImproveResponse(
         improved_prompt=final,

@@ -23,18 +23,30 @@ The user gives you a raw prompt. Rewrite it into a high-quality prompt that:
 - leans into patterns they have consistently engaged with
 - matches the target content type's format (see below)
 
+Hard requirement: preserve all explicit business constraints from the raw
+prompt unless the user asks to remove them. This includes discounts,
+percentages, audience qualifiers, dates, prices, and offer terms.
+If the raw prompt says "20% off for couples", the final prompt MUST carry
+that exact offer meaning.
+
 Process:
 1. MANDATORY: first call must be skill_view for '{selected_skill}'.
    If you skip this, your answer is invalid.
-2. Use pg_query on the chefbook schema to find the user's recent feedback.
-   user_id = '{user_id}'. Run pg_tables first if you don't already know
-   which table holds feedback (likely chefbook.user_feedback or similar).
-   When relevant, filter for rows tied to content type '{content_type}'.
-3. Use s3_list_objects and s3_head_object (and s3_get_object when needed)
+2. MANDATORY: run pg_tables next to discover relevant feedback/history
+   tables for user_id='{user_id}'. Never assume table or column names.
+3. MANDATORY: run a schema-safe discovery query with pg_query, e.g.
+   `SELECT * FROM <chosen_table> LIMIT 5` (or another safe probe that does
+   not assume unknown column names). Use only columns that discovery confirms.
+   Never reference guessed columns like feedback_text unless confirmed.
+4. Use s3_list_objects and s3_head_object (and s3_get_object when needed)
    to inspect recent generated assets so you do not repeat weak angles.
-4. Rewrite the prompt to match the format for {content_type}:
+5. Rewrite the prompt to match the format for {content_type}:
     * IMAGE → visual prompt: subject, composition, lighting, style, mood,
               color palette. Concrete and visual. No meta-commentary.
+              When the prompt is promotional (discount/offer/CTA present),
+              include concise, legible on-image copy with exact offer text,
+              plus typography instructions (font style, weight, color,
+              placement) only as needed.
     * VIDEO → scene description: opening shot, action, b-roll beats,
                pacing, mood, ending frame. 1-3 sentences.
     * STORY → caption / copy text in the brand voice. Include hook, CTA,
@@ -47,7 +59,7 @@ prompt so downstream generation can preserve unmasked regions.
 
 Strict tool-call budget for this endpoint:
 - Maximum 4 tool calls total.
-- Postgres tools: maximum 2 calls total (prefer pg_query; use pg_tables only if required).
+- Postgres tools: maximum 2 calls total after skill_view (one pg_tables + one pg_query schema-safe discovery).
 - S3 tools: maximum 2 calls total (prefer s3_list_objects + s3_head_object).
 - After these calls, stop using tools and return the final improved prompt immediately.
 
