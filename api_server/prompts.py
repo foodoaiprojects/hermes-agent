@@ -119,6 +119,9 @@ Reference images from caller:
 Generated image URL (already generated + saved to S3):
 {generated_image_url}
 
+Target aspect ratio:
+{aspect_ratio}
+
 Goal: create an execution plan for visual generation.
 
 Preferred process:
@@ -144,8 +147,8 @@ Output JSON schema:
     {{"url": "https://...", "reason": "why this logo best fits", "rank": 1}}
   ],
   "canvas": {{
-    "width": 1170,
-    "height": 1456,
+    "width": 1080,
+    "height": 1920,
     "background": "#f5f3ec"
   }}
 }}
@@ -157,6 +160,7 @@ Rules:
   should be generated inside the image.
 - If multiple logos exist for this restaurant, select the most appropriate one(s)
   in `selected_logos` using recency + metadata + style fit.
+- Ensure `canvas.width` and `canvas.height` align with the target aspect ratio.
 - Return JSON only. No markdown. No prose.
 """
 
@@ -210,6 +214,9 @@ Return JSON only with this schema:
 Rules:
 - Ensure readability and contrast.
 - Do not output raw SVG/XML strings. Output vector children JSON only.
+- Provide 4-8 complementary decorative vector elements to add depth (e.g.
+  leaves, grains, sparkles, subtle abstract shapes) with varied size/opacity.
+- Keep decor subtle; avoid overpowering the hero dish/image.
 - Return JSON only.
 """
 
@@ -259,5 +266,7 @@ Return JSON only with this schema:
 Rules:
 - Coordinates must fit inside canvas bounds.
 - Preserve hierarchy: background -> imagery -> decor -> text/CTA.
+- Spread decorative nodes across multiple zones (top-left, top-right, lower-left)
+  to create depth and avoid clustering all decor in one corner.
 - Return JSON only.
 """

@@ -109,6 +109,7 @@ class PostImageCanvasRequest(BaseModel):
     improved_prompt: str = Field(..., min_length=1, max_length=6000)
     image_url: str = Field(..., min_length=1, max_length=4000)
     reference_images: list[str] = Field(default_factory=list, max_length=12)
+    aspect_ratio: Optional[str] = Field(default=None, max_length=20)
 
 
 class PostImageCanvasResponse(BaseModel):
@@ -232,6 +233,31 @@ def _submit_replicate_prediction(
     return pred_id
 
 
+def _sanitize_improved_prompt(raw: str, fallback: str) -> str:
+    text = (raw or "").strip()
+    if not text:
+        return fallback.strip()
+
+    lowered = text.lower()
+    blocked_patterns = [
+        "skill_view(",
+        "pg_tables(",
+        "pg_query(",
+        "s3_list_objects(",
+        "s3_head_object(",
+        "vision_analyze(",
+        "tool call",
+    ]
+    if any(p in lowered for p in blocked_patterns):
+        return fallback.strip()
+
+    # Reject obvious JSON/tool payloads mistakenly returned as final prompt.
+    if text.startswith("{") or text.startswith("["):
+        return fallback.strip()
+
+    return text
+
+
 class StrategyRequest(BaseModel):
     user_id: str = Field(..., min_length=1, max_length=200)
     user_requirement: str = Field(..., min_length=1, max_length=4000)
@@ -300,7 +326,8 @@ async def improve_prompt(body: ImproveRequest):
         logger.exception("improve_prompt failed for user_id=%s", body.user_id)
         raise HTTPException(status_code=500, detail=f"agent error: {e}")
 
-    final = (result.get("final_response") or "").strip()
+    final_raw = (result.get("final_response") or "").strip()
+    final = _sanitize_improved_prompt(final_raw, body.prompt)
     if not final:
         logger.warning(
             "improve_prompt empty response for user_id=%s; returning raw prompt fallback",
@@ -348,7 +375,8 @@ async def start_image_workflow(body: StartImageWorkflowRequest):
         logger.exception("start_image_workflow improve failed for user_id=%s", body.user_id)
         raise HTTPException(status_code=500, detail=f"agent error: {e}")
 
-    improved_prompt = (result.get("final_response") or "").strip() or body.prompt.strip()
+    improved_raw = (result.get("final_response") or "").strip()
+    improved_prompt = _sanitize_improved_prompt(improved_raw, body.prompt)
 
     replicate_input: dict[str, Any] = {
         "prompt": improved_prompt,
@@ -405,6 +433,7 @@ async def post_image_canvas_plan(body: PostImageCanvasRequest):
             selected_skill="ai-image-generation",
             reference_images=reference_images_text,
             generated_image_url=body.image_url,
+            aspect_ratio=body.aspect_ratio or "unknown",
         )
         planner_result = await run_agent_turn(
             session_id=planner_session_id,
