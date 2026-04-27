@@ -23,12 +23,6 @@ The user gives you a raw prompt. Rewrite it into a high-quality prompt that:
 - leans into patterns they have consistently engaged with
 - matches the target content type's format (see below)
 
-Hard requirement: preserve all explicit business constraints from the raw
-prompt unless the user asks to remove them. This includes discounts,
-percentages, audience qualifiers, dates, prices, and offer terms.
-If the raw prompt says "20% off for couples", the final prompt MUST carry
-that exact offer meaning.
-
 Process:
 1. MANDATORY: first call must be skill_view for '{selected_skill}'.
    If you skip this, your answer is invalid.
@@ -43,10 +37,6 @@ Process:
 5. Rewrite the prompt to match the format for {content_type}:
     * IMAGE → visual prompt: subject, composition, lighting, style, mood,
               color palette. Concrete and visual. No meta-commentary.
-              When the prompt is promotional (discount/offer/CTA present),
-              include concise, legible on-image copy with exact offer text,
-              plus typography instructions (font style, weight, color,
-              placement) only as needed.
     * VIDEO → scene description: opening shot, action, b-roll beats,
                pacing, mood, ending frame. 1-3 sentences.
     * STORY → caption / copy text in the brand voice. Include hook, CTA,
