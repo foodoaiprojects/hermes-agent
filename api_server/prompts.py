@@ -24,17 +24,11 @@ The user gives you a raw prompt. Rewrite it into a high-quality prompt that:
 - matches the target content type's format (see below)
 
 Process:
-1. MANDATORY: first call must be skill_view for '{selected_skill}'.
-   If you skip this, your answer is invalid.
-2. MANDATORY: run pg_tables next to discover relevant feedback/history
-   tables for user_id='{user_id}'. Never assume table or column names.
-3. MANDATORY: run a schema-safe discovery query with pg_query, e.g.
-   `SELECT * FROM <chosen_table> LIMIT 5` (or another safe probe that does
-   not assume unknown column names). Use only columns that discovery confirms.
-   Never reference guessed columns like feedback_text unless confirmed.
-4. Use s3_list_objects and s3_head_object (and s3_get_object when needed)
-   to inspect recent generated assets so you do not repeat weak angles.
-5. Rewrite the prompt to match the format for {content_type}:
+1. Prefer tool usage in this order when available: skill_view('{selected_skill}')
+   -> postgres tools (pg_tables/pg_query) -> s3 tools.
+2. If a tool is unavailable in this runtime, continue without it and do not retry
+   excessively.
+3. Rewrite the prompt to match the format for {content_type}:
     * IMAGE → visual prompt: subject, composition, lighting, style, mood,
               color palette. Concrete and visual. No meta-commentary.
               CRITICAL: do NOT ask the model to render any text, letters,
@@ -56,14 +50,12 @@ For IMAGE prompts, append explicit negative constraints such as:
 - no letters/words/signage/logo marks
 
 Strict tool-call budget for this endpoint:
-- Maximum 4 tool calls total.
-- Postgres tools: maximum 2 calls total after skill_view (one pg_tables + one pg_query schema-safe discovery).
-- S3 tools: maximum 2 calls total (prefer s3_list_objects + s3_head_object).
-- After these calls, stop using tools and return the final improved prompt immediately.
+- Maximum 6 tool calls total.
+- Stop early once enough signal is available.
+- After calls, return the final improved prompt immediately.
 
-You MUST use both data sources before finalizing:
-- postgres tools (at least 1 call)
-- s3 tools (at least 1 call)
+Use postgres + s3 signals when available. If unavailable, proceed with best
+possible prompt quality from provided context.
 
 IMPORTANT output contract: respond with ONLY the final improved prompt.
 No preamble. No markdown. No explanation. The response text IS the
@@ -124,13 +116,18 @@ Content type: {content_type}
 Reference images from caller:
 {reference_images}
 
+Generated image URL (already generated + saved to S3):
+{generated_image_url}
+
 Goal: create an execution plan for visual generation.
 
-MANDATORY process:
-1. First tool call must be skill_view for '{selected_skill}'.
-2. Use postgres-reader tools to discover relevant user preference/performance data.
-3. Use s3-reader tools to inspect recent user assets and references.
-4. Then produce a JSON object only.
+Preferred process:
+1. Use skill_view('{selected_skill}') when available.
+2. Use postgres-reader + s3-reader tools for user/asset context.
+3. Use vision_analyze on the generated image URL to inspect what is actually in
+   the image, then align copy/style/layout to that visual truth.
+4. If any tool is unavailable, continue without repeated retries.
+5. Then produce a JSON object only.
 
 Output JSON schema:
 {{

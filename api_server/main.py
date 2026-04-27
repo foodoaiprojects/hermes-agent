@@ -13,6 +13,7 @@ import os
 import re
 import time
 import uuid
+import requests
 from contextlib import asynccontextmanager
 from typing import Any, Literal, Optional
 
@@ -83,6 +84,39 @@ class ImproveResponse(BaseModel):
     agentic_canvas_plan: Optional[dict] = None
 
 
+class StartImageWorkflowRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=200)
+    prompt: str = Field(..., min_length=1, max_length=4000)
+    type: Literal["IMAGE", "VIDEO", "STORY"] = "IMAGE"
+    reference_images: list[str] = Field(default_factory=list, max_length=8)
+    mask_image: Optional[str] = Field(default=None, max_length=2000)
+    ai_model: str = Field(..., min_length=1, max_length=300)
+    webhook_url: str = Field(..., min_length=1, max_length=2000)
+    record_id: str = Field(..., min_length=1, max_length=200)
+    aspect_ratio: Optional[str] = Field(default=None, max_length=20)
+
+
+class StartImageWorkflowResponse(BaseModel):
+    improved_prompt: str
+    prediction_id: Optional[str] = None
+    session_id: str
+    latency_ms: int
+
+
+class PostImageCanvasRequest(BaseModel):
+    user_id: str = Field(..., min_length=1, max_length=200)
+    prompt: str = Field(..., min_length=1, max_length=4000)
+    improved_prompt: str = Field(..., min_length=1, max_length=6000)
+    image_url: str = Field(..., min_length=1, max_length=4000)
+    reference_images: list[str] = Field(default_factory=list, max_length=12)
+
+
+class PostImageCanvasResponse(BaseModel):
+    session_id: str
+    latency_ms: int
+    agentic_canvas_plan: dict
+
+
 def _extract_json_object(raw_text: str) -> Optional[dict]:
     text = (raw_text or "").strip()
     if not text:
@@ -145,6 +179,57 @@ def _default_canvas_plan(improved_prompt: str) -> dict:
             ],
         },
     }
+
+
+def _is_version_hash(model_or_version: str) -> bool:
+    return "/" not in model_or_version and all(
+        c in "0123456789abcdef" for c in model_or_version.lower()
+    )
+
+
+def _predict_path(model_or_version: str) -> tuple[str, dict]:
+    if _is_version_hash(model_or_version):
+        return "/v1/predictions", {"version": model_or_version}
+    if ":" in model_or_version:
+        sha = model_or_version.split(":", 1)[1]
+        return "/v1/predictions", {"version": sha}
+    owner, name = model_or_version.split("/", 1)
+    return f"/v1/models/{owner}/{name}/predictions", {}
+
+
+def _submit_replicate_prediction(
+    *,
+    model_or_version: str,
+    replicate_input: dict,
+    webhook_url: str,
+) -> str:
+    token = os.environ.get("REPLICATE_API_TOKEN")
+    if not token:
+        raise RuntimeError("REPLICATE_API_TOKEN is not set")
+
+    path, extra = _predict_path(model_or_version)
+    base = os.environ.get("REPLICATE_BASE_URL", "https://api.replicate.com")
+    body = {
+        **extra,
+        "input": replicate_input,
+        "webhook": webhook_url,
+        "webhook_events_filter": ["start", "completed"],
+    }
+    resp = requests.post(
+        f"{base.rstrip('/')}{path}",
+        headers={
+            "Authorization": f"Token {token}",
+            "Content-Type": "application/json",
+        },
+        json=body,
+        timeout=60,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    pred_id = data.get("id")
+    if not pred_id:
+        raise RuntimeError("Replicate response missing prediction id")
+    return pred_id
 
 
 class StrategyRequest(BaseModel):
@@ -223,82 +308,158 @@ async def improve_prompt(body: ImproveRequest):
         )
         final = body.prompt.strip()
 
-    agentic_canvas_plan = None
-    if body.type == "IMAGE":
-        planner_session_id = f"{session_id}:planner"
-        styler_session_id = f"{session_id}:styler"
-        layouter_session_id = f"{session_id}:layouter"
-        try:
-            planner_prompt = prompts.CANVAS_PLANNER_SYSTEM.format(
-                user_id=body.user_id,
-                content_type=body.type,
-                selected_skill=skill_by_type[body.type],
-                reference_images=reference_images_text,
-            )
-            planner_result = await run_agent_turn(
-                session_id=planner_session_id,
-                user_id=body.user_id,
-                user_message=body.prompt,
-                system_prompt=planner_prompt,
-                model=os.environ.get("HERMES_MODEL_IMPROVE"),
-                max_iterations=int(
-                    os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")
-                ),
-            )
-            planner = _extract_json_object(planner_result.get("final_response") or "")
-            if not planner:
-                planner = _default_canvas_plan(final)["planner"]
-
-            styler_result = await run_agent_turn(
-                session_id=styler_session_id,
-                user_id=body.user_id,
-                user_message=json.dumps(planner, ensure_ascii=True),
-                system_prompt=prompts.CANVAS_STYLER_SYSTEM,
-                model=os.environ.get("HERMES_MODEL_IMPROVE"),
-                max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
-            )
-            styler = _extract_json_object(styler_result.get("final_response") or "") or {
-                "text_styles": [],
-                "svg_elements": [],
-                "style_notes": "fallback",
-            }
-
-            layouter_input = {
-                "planner": planner,
-                "styler": styler,
-            }
-            layouter_result = await run_agent_turn(
-                session_id=layouter_session_id,
-                user_id=body.user_id,
-                user_message=json.dumps(layouter_input, ensure_ascii=True),
-                system_prompt=prompts.CANVAS_LAYOUTER_SYSTEM,
-                model=os.environ.get("HERMES_MODEL_IMPROVE"),
-                max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
-            )
-            layouter = _extract_json_object(layouter_result.get("final_response") or "") or {
-                "canvas": planner.get("canvas")
-                or {"width": 1170, "height": 1456, "background": "#f5f3ec"},
-                "nodes": [],
-            }
-
-            agentic_canvas_plan = {
-                "workflow_version": "v1",
-                "planner": planner,
-                "styler": styler,
-                "layouter": layouter,
-            }
-        except Exception:
-            logger.exception(
-                "agentic canvas workflow failed for user_id=%s; using fallback plan",
-                body.user_id,
-            )
-            agentic_canvas_plan = _default_canvas_plan(final)
-
     return ImproveResponse(
         improved_prompt=final,
         session_id=session_id,
         latency_ms=int((time.time() - t0) * 1000),
-        agentic_canvas_plan=agentic_canvas_plan,
+        agentic_canvas_plan=None,
+    )
+
+
+@app.post("/v1/image-workflow/start", response_model=StartImageWorkflowResponse)
+async def start_image_workflow(body: StartImageWorkflowRequest):
+    session_id = f"api:image-start:{body.user_id}:{body.record_id}"
+    reference_images_text = (
+        "\n".join(f"- {url}" for url in body.reference_images)
+        if body.reference_images
+        else "- none"
+    )
+    mask_image_text = body.mask_image or "none"
+
+    system_prompt = prompts.IMPROVE_PROMPT_SYSTEM.format(
+        user_id=body.user_id,
+        content_type=body.type,
+        selected_skill="ai-image-generation",
+        reference_images=reference_images_text,
+        mask_image=mask_image_text,
+    )
+    t0 = time.time()
+
+    try:
+        result = await run_agent_turn(
+            session_id=session_id,
+            user_id=body.user_id,
+            user_message=body.prompt,
+            system_prompt=system_prompt,
+            model=os.environ.get("HERMES_MODEL_IMPROVE"),
+            max_iterations=int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")),
+        )
+    except Exception as e:
+        logger.exception("start_image_workflow improve failed for user_id=%s", body.user_id)
+        raise HTTPException(status_code=500, detail=f"agent error: {e}")
+
+    improved_prompt = (result.get("final_response") or "").strip() or body.prompt.strip()
+
+    replicate_input: dict[str, Any] = {
+        "prompt": improved_prompt,
+    }
+    if body.aspect_ratio:
+        replicate_input["aspect_ratio"] = body.aspect_ratio
+    if body.reference_images:
+        replicate_input["image_input"] = body.reference_images[:8]
+    if body.mask_image:
+        replicate_input["mask_image"] = body.mask_image
+
+    prediction_id: Optional[str] = None
+    try:
+        prediction_id = _submit_replicate_prediction(
+            model_or_version=body.ai_model,
+            replicate_input=replicate_input,
+            webhook_url=body.webhook_url,
+        )
+    except Exception as e:
+        # Graceful fallback: consumer will submit locally when prediction_id is missing.
+        logger.warning(
+            "start_image_workflow replicate submit unavailable for user_id=%s: %s",
+            body.user_id,
+            e,
+        )
+
+    return StartImageWorkflowResponse(
+        improved_prompt=improved_prompt,
+        prediction_id=prediction_id,
+        session_id=session_id,
+        latency_ms=int((time.time() - t0) * 1000),
+    )
+
+
+@app.post("/v1/canvas/post-image-plan", response_model=PostImageCanvasResponse)
+async def post_image_canvas_plan(body: PostImageCanvasRequest):
+    t0 = time.time()
+    session_id = f"api:canvas-post-image:{body.user_id}"
+
+    reference_images_text = (
+        "\n".join(f"- {url}" for url in body.reference_images)
+        if body.reference_images
+        else "- none"
+    )
+
+    planner_session_id = f"{session_id}:planner"
+    styler_session_id = f"{session_id}:styler"
+    layouter_session_id = f"{session_id}:layouter"
+
+    try:
+        planner_prompt = prompts.CANVAS_PLANNER_SYSTEM.format(
+            user_id=body.user_id,
+            content_type="IMAGE",
+            selected_skill="ai-image-generation",
+            reference_images=reference_images_text,
+            generated_image_url=body.image_url,
+        )
+        planner_result = await run_agent_turn(
+            session_id=planner_session_id,
+            user_id=body.user_id,
+            user_message=f"User prompt: {body.prompt}\n\nImproved prompt: {body.improved_prompt}\n\nGenerated image URL: {body.image_url}",
+            system_prompt=planner_prompt,
+            model=os.environ.get("HERMES_MODEL_IMPROVE"),
+            max_iterations=int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")),
+        )
+        planner = _extract_json_object(planner_result.get("final_response") or "")
+        if not planner:
+            planner = _default_canvas_plan(body.improved_prompt)["planner"]
+
+        styler_result = await run_agent_turn(
+            session_id=styler_session_id,
+            user_id=body.user_id,
+            user_message=json.dumps(planner, ensure_ascii=True),
+            system_prompt=prompts.CANVAS_STYLER_SYSTEM,
+            model=os.environ.get("HERMES_MODEL_IMPROVE"),
+            max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
+        )
+        styler = _extract_json_object(styler_result.get("final_response") or "") or {
+            "text_styles": [],
+            "svg_elements": [],
+            "style_notes": "fallback",
+        }
+
+        layouter_result = await run_agent_turn(
+            session_id=layouter_session_id,
+            user_id=body.user_id,
+            user_message=json.dumps({"planner": planner, "styler": styler}, ensure_ascii=True),
+            system_prompt=prompts.CANVAS_LAYOUTER_SYSTEM,
+            model=os.environ.get("HERMES_MODEL_IMPROVE"),
+            max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
+        )
+        layouter = _extract_json_object(layouter_result.get("final_response") or "") or {
+            "canvas": planner.get("canvas")
+            or {"width": 1170, "height": 1456, "background": "#f5f3ec"},
+            "nodes": [],
+        }
+
+        plan = {
+            "workflow_version": "v1",
+            "planner": planner,
+            "styler": styler,
+            "layouter": layouter,
+        }
+    except Exception:
+        logger.exception("post_image_canvas_plan failed user_id=%s", body.user_id)
+        plan = _default_canvas_plan(body.improved_prompt)
+
+    return PostImageCanvasResponse(
+        session_id=session_id,
+        latency_ms=int((time.time() - t0) * 1000),
+        agentic_canvas_plan=plan,
     )
 
 
