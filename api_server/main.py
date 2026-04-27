@@ -7,8 +7,10 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -78,6 +80,71 @@ class ImproveResponse(BaseModel):
     improved_prompt: str
     session_id: str
     latency_ms: int
+    agentic_canvas_plan: Optional[dict] = None
+
+
+def _extract_json_object(raw_text: str) -> Optional[dict]:
+    text = (raw_text or "").strip()
+    if not text:
+        return None
+
+    try:
+        parsed = json.loads(text)
+        return parsed if isinstance(parsed, dict) else None
+    except Exception:
+        pass
+
+    fenced = re.search(r"```(?:json)?\s*(\{.*\})\s*```", text, re.DOTALL)
+    if fenced:
+        try:
+            parsed = json.loads(fenced.group(1))
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            pass
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start >= 0 and end > start:
+        candidate = text[start : end + 1]
+        try:
+            parsed = json.loads(candidate)
+            return parsed if isinstance(parsed, dict) else None
+        except Exception:
+            return None
+
+    return None
+
+
+def _default_canvas_plan(improved_prompt: str) -> dict:
+    return {
+        "workflow_version": "v1",
+        "planner": {
+            "image_generation_prompt": improved_prompt,
+            "content_copy": [
+                {"id": "headline", "role": "headline", "text": "Chef Special"},
+                {"id": "subheadline", "role": "subheadline", "text": "Freshly made today"},
+                {"id": "cta", "role": "cta", "text": "Book Now"},
+            ],
+            "reference_images": [],
+            "selected_logos": [],
+            "canvas": {"width": 1170, "height": 1456, "background": "#f5f3ec"},
+        },
+        "styler": {"text_styles": [], "svg_elements": [], "style_notes": "fallback"},
+        "layouter": {
+            "canvas": {"width": 1170, "height": 1456, "background": "#f5f3ec"},
+            "nodes": [
+                {
+                    "id": "generated-image",
+                    "kind": "generated_image",
+                    "x": 60,
+                    "y": 120,
+                    "width": 1050,
+                    "height": 1200,
+                    "z_index": 1,
+                }
+            ],
+        },
+    }
 
 
 class StrategyRequest(BaseModel):
@@ -156,10 +223,82 @@ async def improve_prompt(body: ImproveRequest):
         )
         final = body.prompt.strip()
 
+    agentic_canvas_plan = None
+    if body.type == "IMAGE":
+        planner_session_id = f"{session_id}:planner"
+        styler_session_id = f"{session_id}:styler"
+        layouter_session_id = f"{session_id}:layouter"
+        try:
+            planner_prompt = prompts.CANVAS_PLANNER_SYSTEM.format(
+                user_id=body.user_id,
+                content_type=body.type,
+                selected_skill=skill_by_type[body.type],
+                reference_images=reference_images_text,
+            )
+            planner_result = await run_agent_turn(
+                session_id=planner_session_id,
+                user_id=body.user_id,
+                user_message=body.prompt,
+                system_prompt=planner_prompt,
+                model=os.environ.get("HERMES_MODEL_IMPROVE"),
+                max_iterations=int(
+                    os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")
+                ),
+            )
+            planner = _extract_json_object(planner_result.get("final_response") or "")
+            if not planner:
+                planner = _default_canvas_plan(final)["planner"]
+
+            styler_result = await run_agent_turn(
+                session_id=styler_session_id,
+                user_id=body.user_id,
+                user_message=json.dumps(planner, ensure_ascii=True),
+                system_prompt=prompts.CANVAS_STYLER_SYSTEM,
+                model=os.environ.get("HERMES_MODEL_IMPROVE"),
+                max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
+            )
+            styler = _extract_json_object(styler_result.get("final_response") or "") or {
+                "text_styles": [],
+                "svg_elements": [],
+                "style_notes": "fallback",
+            }
+
+            layouter_input = {
+                "planner": planner,
+                "styler": styler,
+            }
+            layouter_result = await run_agent_turn(
+                session_id=layouter_session_id,
+                user_id=body.user_id,
+                user_message=json.dumps(layouter_input, ensure_ascii=True),
+                system_prompt=prompts.CANVAS_LAYOUTER_SYSTEM,
+                model=os.environ.get("HERMES_MODEL_IMPROVE"),
+                max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
+            )
+            layouter = _extract_json_object(layouter_result.get("final_response") or "") or {
+                "canvas": planner.get("canvas")
+                or {"width": 1170, "height": 1456, "background": "#f5f3ec"},
+                "nodes": [],
+            }
+
+            agentic_canvas_plan = {
+                "workflow_version": "v1",
+                "planner": planner,
+                "styler": styler,
+                "layouter": layouter,
+            }
+        except Exception:
+            logger.exception(
+                "agentic canvas workflow failed for user_id=%s; using fallback plan",
+                body.user_id,
+            )
+            agentic_canvas_plan = _default_canvas_plan(final)
+
     return ImproveResponse(
         improved_prompt=final,
         session_id=session_id,
         latency_ms=int((time.time() - t0) * 1000),
+        agentic_canvas_plan=agentic_canvas_plan,
     )
 
 
