@@ -176,34 +176,61 @@ Return JSON only with this schema:
   "text_styles": [
     {{
       "copy_id": "headline",
-      "font_family": "Outfit",
-      "font_size": 180,
+      "font_family": "Playfair Display",
+      "font_size": 80,
       "font_weight": "900",
-      "color": "#1a1a1a",
-      "letter_spacing": -2,
-      "line_height": 0.9,
-      "text_align": "left",
-      "text_transform": "uppercase"
+      "color": "#FFFFFF",
+      "letter_spacing": -1.5,
+      "line_height": 1.08,
+      "text_align": "center"
+    }},
+    {{
+      "copy_id": "subheadline",
+      "font_family": "Outfit",
+      "font_size": 30,
+      "font_weight": "400",
+      "color": "#E8D5B7",
+      "letter_spacing": 0.6,
+      "line_height": 1.32,
+      "text_align": "center"
+    }},
+    {{
+      "copy_id": "cta",
+      "font_family": "Outfit",
+      "font_size": 32,
+      "font_weight": "800",
+      "color": "#FFFFFF",
+      "letter_spacing": 0.8,
+      "line_height": 1.0,
+      "text_align": "center"
     }}
   ],
   "svg_elements": [
     {{
       "id": "decor_1",
-      "name": "spark",
-      "style": {{"opacity": 0.12}},
-      "width": 120,
-      "height": 120,
+      "name": "sparkle_cluster",
+      "style": {{"opacity": 0.85}},
+      "width": 140,
+      "height": 140,
       "children": [
         {{
           "id": "svg-1",
           "type": "path",
           "x": 0,
           "y": 0,
-          "width": 120,
-          "height": 120,
+          "width": 140,
+          "height": 140,
           "rotation": 0,
-          "d": "M50 0L62.5 37.5L100 50L62.5 62.5L50 100L37.5 62.5L0 50L37.5 37.5L50 0Z",
-          "style": {{"fill": "#1A1A1A", "opacity": 0.1}}
+          "d": "M70 14L77 49L112 56L77 63L70 98L63 63L28 56L63 49Z",
+          "style": {{"fill": "#FFFFFF", "opacity": 0.24}}
+        }},
+        {{
+          "id": "svg-2",
+          "type": "ellipse",
+          "cx": 120, "cy": 26, "rx": 3.5, "ry": 3.5,
+          "x": 116, "y": 22, "width": 7, "height": 7,
+          "rotation": 0,
+          "style": {{"fill": "#FFFFFF", "opacity": 0.42}}
         }}
       ]
     }}
@@ -212,10 +239,13 @@ Return JSON only with this schema:
 }}
 
 Rules:
-- Ensure readability and contrast.
+- headline font_size: 72-96. subheadline: 26-36. cta: 28-38.
+- line_height must be >= 1.0 to avoid overlap.
+- Use "Playfair Display" for headline (elegant serif), "Outfit" for body/cta.
+- All text color should be white or warm light (#FFFFFF, #E8D5B7, #FFF8E1) — text renders over dark image.
 - Do not output raw SVG/XML strings. Output vector children JSON only.
-- Provide 4-8 complementary decorative vector elements to add depth (e.g.
-  leaves, grains, sparkles, subtle abstract shapes) with varied size/opacity.
+- Provide 3-6 decorative vector elements: sparkle paths, diamond outlines,
+  thin geometric strokes. Vary position hints via x/y/rotation.
 - Keep decor subtle; avoid overpowering the hero dish/image.
 - Return JSON only.
 """
@@ -229,15 +259,15 @@ for a canvas engine.
 
 Return JSON only with this schema:
 {{
-  "canvas": {{"width": 1170, "height": 1456, "background": "#f5f3ec"}},
+  "canvas": {{"width": 1080, "height": 1920, "background": "#0d0d0d"}},
   "nodes": [
     {{
       "id": "generated-image",
       "kind": "generated_image",
-      "x": 60,
-      "y": 120,
-      "width": 1050,
-      "height": 1200,
+      "x": 0,
+      "y": 0,
+      "width": 1080,
+      "height": 1920,
       "z_index": 1
     }},
     {{
@@ -245,28 +275,55 @@ Return JSON only with this schema:
       "kind": "text",
       "copy_id": "headline",
       "x": 80,
-      "y": 80,
+      "y": 1056,
       "width": 920,
       "height": 220,
       "z_index": 5
     }},
     {{
+      "id": "subheadline-node",
+      "kind": "text",
+      "copy_id": "subheadline",
+      "x": 100,
+      "y": 1310,
+      "width": 880,
+      "height": 100,
+      "z_index": 5
+    }},
+    {{
+      "id": "cta-node",
+      "kind": "text",
+      "copy_id": "cta",
+      "x": 260,
+      "y": 1620,
+      "width": 560,
+      "height": 80,
+      "z_index": 6
+    }},
+    {{
       "id": "decor_1_node",
       "kind": "vector_group",
       "svg_id": "decor_1",
-      "x": 930,
-      "y": 120,
-      "width": 120,
-      "height": 120,
+      "x": 880,
+      "y": 80,
+      "width": 140,
+      "height": 140,
       "z_index": 2
     }}
   ]
 }}
 
 Rules:
-- Coordinates must fit inside canvas bounds.
+- Coordinates must fit inside canvas bounds (use actual canvas.width/height from planner).
+- TEXT PLACEMENT: Place headline at y >= canvas.height * 0.50. Subheadline cascades
+  below headline. CTA at y >= canvas.height * 0.82.
+- Use the planner's image analysis (from vision_analyze) to identify the focal point
+  (typically the food subject). Place text in clear/uncluttered zones — usually the
+  lower portion of the image where background is simpler.
+- For images where subject fills the full frame: use lower 40% for text cluster.
+- For images with clear sky/plain top: text can optionally go at top (y < canvas.height * 0.25).
 - Preserve hierarchy: background -> imagery -> decor -> text/CTA.
-- Spread decorative nodes across multiple zones (top-left, top-right, lower-left)
-  to create depth and avoid clustering all decor in one corner.
+- Spread decorative nodes across multiple zones (top-left corner, top-right corner)
+  to create depth, NOT clustered near the text zone.
 - Return JSON only.
 """
