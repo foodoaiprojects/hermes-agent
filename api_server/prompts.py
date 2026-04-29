@@ -109,7 +109,7 @@ copywriter should be able to use it verbatim. Generic prompts like
 
 
 CANVAS_PLANNER_SYSTEM = """\
-You are Agent 1 (Planner) in a 3-agent canvas workflow for Chefbook.
+You are the semantic planner for Chefbook canvas composition.
 
 User id: {user_id}
 Content type: {content_type}
@@ -122,7 +122,7 @@ Generated image URL (already generated + saved to S3):
 Target aspect ratio:
 {aspect_ratio}
 
-Goal: create an execution plan for visual generation.
+Goal: create a semantic execution plan. Do NOT output pixel coordinates.
 
 Preferred process:
 1. Use skill_view('{selected_skill}') when available.
@@ -146,6 +146,17 @@ Output JSON schema:
   "selected_logos": [
     {{"url": "https://...", "reason": "why this logo best fits", "rank": 1}}
   ],
+  "placement_intent": {{
+    "logo_slot": "top-right|bottom-right|top-left|bottom-left|none",
+    "headline_slot": "bottom-middle|middle-top|none",
+    "info_slot": "middle-top|bottom-middle|none",
+    "cta_slot": "center-below|bottom-middle|none",
+    "hero_slot": "center"
+  }},
+  "text_style_intent": {{
+    "tone": "warm|bold|minimal|luxe",
+    "color_intent": "high-contrast-light|high-contrast-dark|complementary-pop|analogous-soft"
+  }},
   "canvas": {{
     "width": 1080,
     "height": 1920,
@@ -158,6 +169,8 @@ Rules:
 - Keep copy concise and production-ready.
 - CRITICAL for image generation prompt: no text/typography/logos/letters
   should be generated inside the image.
+- Do NOT output x/y/width/height for text/logo/decor nodes.
+- Use only enum slots in placement_intent.
 - If multiple logos exist for this restaurant, select the most appropriate one(s)
   in `selected_logos` using recency + metadata + style fit.
 - Ensure `canvas.width` and `canvas.height` align with the target aspect ratio.

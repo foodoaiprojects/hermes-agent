@@ -152,7 +152,7 @@ def _extract_json_object(raw_text: str) -> Optional[dict]:
 
 def _default_canvas_plan(improved_prompt: str) -> dict:
     return {
-        "workflow_version": "v1",
+        "workflow_version": "v2",
         "planner": {
             "image_generation_prompt": improved_prompt,
             "content_copy": [
@@ -162,23 +162,59 @@ def _default_canvas_plan(improved_prompt: str) -> dict:
             ],
             "reference_images": [],
             "selected_logos": [],
+            "placement_intent": {
+                "logo_slot": "top-left",
+                "headline_slot": "bottom-middle",
+                "info_slot": "middle-top",
+                "cta_slot": "center-below",
+                "hero_slot": "center",
+            },
+            "text_style_intent": {
+                "tone": "warm",
+                "color_intent": "high-contrast-light",
+            },
             "canvas": {"width": 1170, "height": 1456, "background": "#f5f3ec"},
         },
-        "styler": {"text_styles": [], "svg_elements": [], "style_notes": "fallback"},
-        "layouter": {
-            "canvas": {"width": 1170, "height": 1456, "background": "#f5f3ec"},
-            "nodes": [
-                {
-                    "id": "generated-image",
-                    "kind": "generated_image",
-                    "x": 60,
-                    "y": 120,
-                    "width": 1050,
-                    "height": 1200,
-                    "z_index": 1,
-                }
-            ],
-        },
+    }
+
+
+def _normalize_placement_intent(raw: Any) -> dict:
+    allowed = {
+        "logo_slot": {"top-right", "bottom-right", "top-left", "bottom-left", "none"},
+        "headline_slot": {"bottom-middle", "middle-top", "none"},
+        "info_slot": {"bottom-middle", "middle-top", "none"},
+        "cta_slot": {"center-below", "bottom-middle", "none"},
+        "hero_slot": {"center"},
+    }
+    defaults = {
+        "logo_slot": "top-left",
+        "headline_slot": "bottom-middle",
+        "info_slot": "middle-top",
+        "cta_slot": "center-below",
+        "hero_slot": "center",
+    }
+    payload = raw if isinstance(raw, dict) else {}
+    out: dict[str, str] = {}
+    for key, values in allowed.items():
+        val = str(payload.get(key) or "").strip().lower()
+        out[key] = val if val in values else defaults[key]
+    return out
+
+
+def _normalize_text_style_intent(raw: Any) -> dict:
+    tone_values = {"warm", "bold", "minimal", "luxe"}
+    color_values = {
+        "high-contrast-light",
+        "high-contrast-dark",
+        "complementary-pop",
+        "analogous-soft",
+    }
+    payload = raw if isinstance(raw, dict) else {}
+    tone = str(payload.get("tone") or "").strip().lower()
+    color_intent = str(payload.get("color_intent") or "").strip().lower()
+    return {
+        "tone": tone if tone in tone_values else "warm",
+        "color_intent": color_intent if color_intent in color_values else "high-contrast-light",
     }
 
 
@@ -423,8 +459,6 @@ async def post_image_canvas_plan(body: PostImageCanvasRequest):
     )
 
     planner_session_id = f"{session_id}:planner"
-    styler_session_id = f"{session_id}:styler"
-    layouter_session_id = f"{session_id}:layouter"
 
     try:
         planner_prompt = prompts.CANVAS_PLANNER_SYSTEM.format(
@@ -447,39 +481,16 @@ async def post_image_canvas_plan(body: PostImageCanvasRequest):
         if not planner:
             planner = _default_canvas_plan(body.improved_prompt)["planner"]
 
-        styler_result = await run_agent_turn(
-            session_id=styler_session_id,
-            user_id=body.user_id,
-            user_message=json.dumps(planner, ensure_ascii=True),
-            system_prompt=prompts.CANVAS_STYLER_SYSTEM,
-            model=os.environ.get("HERMES_MODEL_IMPROVE"),
-            max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
+        planner["placement_intent"] = _normalize_placement_intent(
+            planner.get("placement_intent")
         )
-        styler = _extract_json_object(styler_result.get("final_response") or "") or {
-            "text_styles": [],
-            "svg_elements": [],
-            "style_notes": "fallback",
-        }
-
-        layouter_result = await run_agent_turn(
-            session_id=layouter_session_id,
-            user_id=body.user_id,
-            user_message=json.dumps({"planner": planner, "styler": styler}, ensure_ascii=True),
-            system_prompt=prompts.CANVAS_LAYOUTER_SYSTEM,
-            model=os.environ.get("HERMES_MODEL_IMPROVE"),
-            max_iterations=max(6, int(os.environ.get("HERMES_IMPROVE_MAX_ITERATIONS", "15")) // 2),
+        planner["text_style_intent"] = _normalize_text_style_intent(
+            planner.get("text_style_intent")
         )
-        layouter = _extract_json_object(layouter_result.get("final_response") or "") or {
-            "canvas": planner.get("canvas")
-            or {"width": 1170, "height": 1456, "background": "#f5f3ec"},
-            "nodes": [],
-        }
 
         plan = {
-            "workflow_version": "v1",
+            "workflow_version": "v2",
             "planner": planner,
-            "styler": styler,
-            "layouter": layouter,
         }
     except Exception:
         logger.exception("post_image_canvas_plan failed user_id=%s", body.user_id)
