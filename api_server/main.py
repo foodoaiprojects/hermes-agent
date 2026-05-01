@@ -214,8 +214,14 @@ def _normalize_text_style_intent(raw: Any) -> dict:
         "complementary-pop",
         "analogous-soft",
     }
-    headline_fonts = {"Playfair Display", "Bodoni Moda", "Libre Caslon Text", "Cormorant Garamond", "Cinzel"}
-    body_fonts = {"Outfit", "Montserrat", "DM Sans", "Plus Jakarta Sans", "Poppins"}
+    headline_fonts = {
+        "Playfair Display", "Bodoni Moda", "Libre Caslon Text", "Cormorant Garamond", "Cinzel",
+        "EB Garamond", "Vollkorn", "Literata", "Domine", "Newsreader", "Bebas Neue", "Anton",
+    }
+    body_fonts = {
+        "Outfit", "Montserrat", "DM Sans", "Plus Jakarta Sans", "Poppins",
+        "Space Grotesk", "Sora", "Manrope", "Public Sans", "Work Sans",
+    }
     payload = raw if isinstance(raw, dict) else {}
     tone = str(payload.get("tone") or "").strip().lower()
     color_intent = str(payload.get("color_intent") or "").strip().lower()

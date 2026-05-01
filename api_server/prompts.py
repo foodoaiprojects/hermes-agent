@@ -157,9 +157,9 @@ Output JSON schema:
     "tone": "warm|bold|minimal|luxe",
     "color_intent": "high-contrast-light|high-contrast-dark|complementary-pop|analogous-soft",
     "font_choices": {{
-      "headline": "Playfair Display|Bodoni Moda|Libre Caslon Text|Cormorant Garamond|Cinzel",
-      "subheadline": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins",
-      "cta": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins"
+      "headline": "Playfair Display|Bodoni Moda|Libre Caslon Text|Cormorant Garamond|Cinzel|EB Garamond|Vollkorn|Literata|Domine|Newsreader|Bebas Neue|Anton",
+      "subheadline": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins|Space Grotesk|Sora|Manrope|Public Sans|Work Sans",
+      "cta": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins|Space Grotesk|Sora|Manrope|Public Sans|Work Sans"
     }}
   }},
   "canvas": {{
@@ -176,8 +176,9 @@ Rules:
   should be generated inside the image.
 - Do NOT output x/y/width/height for text/logo/decor nodes.
 - Use only enum slots in placement_intent.
-- Choose ad-quality premium fonts from the allowed list in text_style_intent.font_choices.
-- Font choices must be practical for mobile readability while still feeling promotional.
+- Choose bold, premium ad-poster typography from the allowed list in text_style_intent.font_choices.
+- Prefer high-contrast display serif/sans pairings (editorial headline + clean supporting text).
+- Font choices must remain mobile-readable while feeling distinctly promotional and premium.
 - If multiple logos exist for this restaurant, select the most appropriate one(s)
   in `selected_logos` using recency + metadata + style fit.
 - Ensure `canvas.width` and `canvas.height` align with the target aspect ratio.
