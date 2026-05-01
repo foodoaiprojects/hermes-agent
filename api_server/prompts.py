@@ -155,7 +155,12 @@ Output JSON schema:
   }},
   "text_style_intent": {{
     "tone": "warm|bold|minimal|luxe",
-    "color_intent": "high-contrast-light|high-contrast-dark|complementary-pop|analogous-soft"
+    "color_intent": "high-contrast-light|high-contrast-dark|complementary-pop|analogous-soft",
+    "font_choices": {{
+      "headline": "Playfair Display|Bodoni Moda|Libre Caslon Text|Cormorant Garamond|Cinzel",
+      "subheadline": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins",
+      "cta": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins"
+    }}
   }},
   "canvas": {{
     "width": 1080,
@@ -171,6 +176,8 @@ Rules:
   should be generated inside the image.
 - Do NOT output x/y/width/height for text/logo/decor nodes.
 - Use only enum slots in placement_intent.
+- Choose ad-quality premium fonts from the allowed list in text_style_intent.font_choices.
+- Font choices must be practical for mobile readability while still feeling promotional.
 - If multiple logos exist for this restaurant, select the most appropriate one(s)
   in `selected_logos` using recency + metadata + style fit.
 - Ensure `canvas.width` and `canvas.height` align with the target aspect ratio.

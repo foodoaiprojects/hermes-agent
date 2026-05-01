@@ -172,6 +172,11 @@ def _default_canvas_plan(improved_prompt: str) -> dict:
             "text_style_intent": {
                 "tone": "warm",
                 "color_intent": "high-contrast-light",
+                "font_choices": {
+                    "headline": "Playfair Display",
+                    "subheadline": "Outfit",
+                    "cta": "Outfit",
+                },
             },
             "canvas": {"width": 1170, "height": 1456, "background": "#f5f3ec"},
         },
@@ -209,12 +214,23 @@ def _normalize_text_style_intent(raw: Any) -> dict:
         "complementary-pop",
         "analogous-soft",
     }
+    headline_fonts = {"Playfair Display", "Bodoni Moda", "Libre Caslon Text", "Cormorant Garamond", "Cinzel"}
+    body_fonts = {"Outfit", "Montserrat", "DM Sans", "Plus Jakarta Sans", "Poppins"}
     payload = raw if isinstance(raw, dict) else {}
     tone = str(payload.get("tone") or "").strip().lower()
     color_intent = str(payload.get("color_intent") or "").strip().lower()
+    raw_choices = payload.get("font_choices") if isinstance(payload.get("font_choices"), dict) else {}
+    headline_choice = str(raw_choices.get("headline") or "").strip()
+    subheadline_choice = str(raw_choices.get("subheadline") or "").strip()
+    cta_choice = str(raw_choices.get("cta") or "").strip()
     return {
         "tone": tone if tone in tone_values else "warm",
         "color_intent": color_intent if color_intent in color_values else "high-contrast-light",
+        "font_choices": {
+            "headline": headline_choice if headline_choice in headline_fonts else "Playfair Display",
+            "subheadline": subheadline_choice if subheadline_choice in body_fonts else "Outfit",
+            "cta": cta_choice if cta_choice in body_fonts else "Outfit",
+        },
     }
 
 
