@@ -173,9 +173,9 @@ def _default_canvas_plan(improved_prompt: str) -> dict:
                 "tone": "warm",
                 "color_intent": "high-contrast-light",
                 "font_choices": {
-                    "headline": "Playfair Display",
-                    "subheadline": "Outfit",
-                    "cta": "Outfit",
+                    "headline": "Great Vibes",
+                    "subheadline": "sans-serif",
+                    "cta": "sans-serif",
                 },
             },
             "canvas": {"width": 1170, "height": 1456, "background": "#f5f3ec"},
@@ -214,28 +214,39 @@ def _normalize_text_style_intent(raw: Any) -> dict:
         "complementary-pop",
         "analogous-soft",
     }
-    headline_fonts = {
-        "Playfair Display", "Bodoni Moda", "Libre Caslon Text", "Cormorant Garamond", "Cinzel",
-        "EB Garamond", "Vollkorn", "Literata", "Domine", "Newsreader", "Bebas Neue", "Anton",
-    }
-    body_fonts = {
-        "Outfit", "Montserrat", "DM Sans", "Plus Jakarta Sans", "Poppins",
-        "Space Grotesk", "Sora", "Manrope", "Public Sans", "Work Sans",
-    }
+    def _normalize_font_name(value: Any) -> str | None:
+        if value is None:
+            return None
+        candidate = str(value).strip().strip("\"'")
+        if not candidate:
+            return None
+        if "," in candidate:
+            candidate = candidate.split(",", 1)[0].strip()
+        if len(candidate) > 80:
+            return None
+        return candidate
+
     payload = raw if isinstance(raw, dict) else {}
     tone = str(payload.get("tone") or "").strip().lower()
     color_intent = str(payload.get("color_intent") or "").strip().lower()
     raw_choices = payload.get("font_choices") if isinstance(payload.get("font_choices"), dict) else {}
-    headline_choice = str(raw_choices.get("headline") or "").strip()
-    subheadline_choice = str(raw_choices.get("subheadline") or "").strip()
-    cta_choice = str(raw_choices.get("cta") or "").strip()
+    headline_choice = _normalize_font_name(raw_choices.get("headline"))
+    subheadline_choice = _normalize_font_name(raw_choices.get("subheadline"))
+    cta_choice = _normalize_font_name(raw_choices.get("cta"))
+
+    creative_headline_fonts = {
+        "great vibes", "dancing script", "allura", "pacifico", "sacramento", "alex brush", "satisfy",
+    }
+    if headline_choice and headline_choice.strip().lower() not in creative_headline_fonts:
+        headline_choice = None
+
     return {
         "tone": tone if tone in tone_values else "warm",
         "color_intent": color_intent if color_intent in color_values else "high-contrast-light",
         "font_choices": {
-            "headline": headline_choice if headline_choice in headline_fonts else "Playfair Display",
-            "subheadline": subheadline_choice if subheadline_choice in body_fonts else "Outfit",
-            "cta": cta_choice if cta_choice in body_fonts else "Outfit",
+            "headline": headline_choice or "Great Vibes",
+            "subheadline": subheadline_choice or "sans-serif",
+            "cta": cta_choice or "sans-serif",
         },
     }
 

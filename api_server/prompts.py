@@ -157,9 +157,9 @@ Output JSON schema:
     "tone": "warm|bold|minimal|luxe",
     "color_intent": "high-contrast-light|high-contrast-dark|complementary-pop|analogous-soft",
     "font_choices": {{
-      "headline": "Playfair Display|Bodoni Moda|Libre Caslon Text|Cormorant Garamond|Cinzel|EB Garamond|Vollkorn|Literata|Domine|Newsreader|Bebas Neue|Anton",
-      "subheadline": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins|Space Grotesk|Sora|Manrope|Public Sans|Work Sans",
-      "cta": "Outfit|Montserrat|DM Sans|Plus Jakarta Sans|Poppins|Space Grotesk|Sora|Manrope|Public Sans|Work Sans"
+      "headline": "Great Vibes|Dancing Script|Allura|Pacifico|Sacramento|Alex Brush|Satisfy",
+      "subheadline": "string (readable supporting font name)",
+      "cta": "string (clear high-impact font name)"
     }}
   }},
   "canvas": {{
@@ -176,9 +176,13 @@ Rules:
   should be generated inside the image.
 - Do NOT output x/y/width/height for text/logo/decor nodes.
 - Use only enum slots in placement_intent.
-- Choose bold, premium ad-poster typography from the allowed list in text_style_intent.font_choices.
+- Choose bold, premium ad-poster typography in text_style_intent.font_choices.
 - Prefer high-contrast display serif/sans pairings (editorial headline + clean supporting text).
 - Font choices must remain mobile-readable while feeling distinctly promotional and premium.
+- Headline must always be cursive/creative/fancy display style.
+- Never use minimalist sans fonts for headline (forbidden examples: Inter, Montserrat, Roboto, Outfit).
+- Headline must be chosen only from: Great Vibes, Dancing Script, Allura, Pacifico, Sacramento, Alex Brush, Satisfy.
+- Subheadline and CTA can use clean sans fonts for readability.
 - If multiple logos exist for this restaurant, select the most appropriate one(s)
   in `selected_logos` using recency + metadata + style fit.
 - Ensure `canvas.width` and `canvas.height` align with the target aspect ratio.
@@ -262,7 +266,7 @@ Return JSON only with this schema:
 Rules:
 - headline font_size: 72-96. subheadline: 26-36. cta: 28-38.
 - line_height must be >= 1.0 to avoid overlap.
-- Use "Playfair Display" for headline (elegant serif), "Outfit" for body/cta.
+- Use a premium display face for headline and a readable companion face for body/cta.
 - All text color should be white or warm light (#FFFFFF, #E8D5B7, #FFF8E1) — text renders over dark image.
 - Do not output raw SVG/XML strings. Output vector children JSON only.
 - Provide 3-6 decorative vector elements: sparkle paths, diamond outlines,
